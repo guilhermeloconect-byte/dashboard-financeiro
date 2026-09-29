@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard Financeiro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  body{margin:0;background:#0b0f14;color:#e5e7eb;font-family:-apple-system,system-ui,sans-serif;}
+  header{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;}
+  input,select{color:#e5e7eb;}
+  input::placeholder{color:#6b7280;}
+</style>
+</head>
+<body>
+<header class="px-4 pt-4 pb-3 bg-[#0b0f14]/90 backdrop-blur border-b border-neutral-900">
+  <h1 class="text-lg font-bold">💰 Dashboard Financeiro</h1>
+</header>
+
+<main class="px-4 py-4 max-w-md mx-auto pb-16">
+
+  <div class="flex items-center justify-between bg-neutral-900 rounded-2xl p-3 mb-4">
+    <button onclick="changeMonth(-1)" class="text-xl w-9 h-9 rounded-full active:bg-neutral-800">‹</button>
+    <div id="monthSelLabel" class="text-sm font-semibold capitalize"></div>
+    <button onclick="changeMonth(1)" class="text-xl w-9 h-9 rounded-full active:bg-neutral-800">›</button>
+  </div>
+
+  <section class="bg-neutral-900 rounded-2xl p-4 mb-4">
+    <span class="text-xs text-neutral-500">Orçamento mensal</span>
+    <input id="budgetInput" type="number" step="0.01" placeholder="Defina seu orçamento (R$)"
+      class="bg-neutral-800 rounded-lg px-3 py-2 text-sm w-full outline-none mt-1"
+      onchange="setBudget(parseFloat(this.value)||0)">
+  </section>
+
+  <div class="grid grid-cols-2 gap-3 mb-4">
+    <div class="bg-neutral-900 rounded-2xl p-4">
+      <div class="text-xs text-neutral-500 mb-1">Gasto no mês</div>
+      <div id="totalGasto" class="text-2xl font-bold">R$ 0,00</div>
+    </div>
+    <div class="bg-neutral-900 rounded-2xl p-4">
+      <div class="text-xs text-neutral-500 mb-1">Restante</div>
+      <div id="restante" class="text-2xl font-bold text-emerald-400">R$ 0,00</div>
+    </div>
+    <div class="bg-neutral-900 rounded-2xl p-4 border border-neutral-800">
+      <div class="text-xs text-neutral-500 mb-1">Maior categoria</div>
+      <div id="maiorCat" class="text-lg font-bold text-purple-400 truncate">—</div>
+    </div>
+    <div class="bg-neutral-900 rounded-2xl p-4 border border-neutral-800">
+      <div class="text-xs text-neutral-500 mb-1">Média diária</div>
+      <div id="mediaDia" class="text-lg font-bold">R$ 0,00</div>
+    </div>
+  </div>
+
+  <div id="alerts" class="mb-4"></div>
+
+  <section class="bg-neutral-900 rounded-2xl p-4 mb-4">
+    <div class="text-xs text-neutral-500 mb-2">Gastos por categoria</div>
+    <canvas id="chartCat" height="220"></canvas>
+  </section>
+
+  <section class="bg-neutral-900 rounded-2xl p-4 mb-4">
+    <div class="text-xs text-neutral-500 mb-2">Evolução (últimos 12 meses)</div>
+    <canvas id="chartEvo" height="160"></canvas>
+  </section>
+
+  <button onclick="openManual()" class="w-full bg-neutral-900 active:bg-neutral-800 rounded-2xl p-4 mb-4 text-sm font-semibold text-emerald-400 flex items-center gap-2">
+    <span class="text-lg leading-none">+</span> Manual
+  </button>
+
+  <section class="bg-neutral-900 rounded-2xl p-4 mb-4">
+    <h2 class="text-sm font-semibold text-neutral-300 mb-1">Importar fatura (PDF)</h2>
+    <p class="text-xs text-neutral-500 mb-2">A leitura é automática mas pode errar — revise antes de confirmar.</p>
+    <input type="file" id="pdfInput" accept="application/pdf"
+      class="text-xs text-neutral-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-neutral-800 file:text-neutral-200 w-full">
+    <div id="pdfStatus" class="text-xs text-neutral-500 mt-2"></div>
+    <div id="reviewList" class="mt-3"></div>
+  </section>
+
+  <section>
+    <div class="text-xs text-neutral-500 mb-2 px-1">Lançamentos do mês</div>
+    <div id="list"></div>
+  </section>
+
+  <section class="bg-neutral-900 rounded-2xl p-4 mt-4">
+    <h2 class="text-sm font-semibold text-neutral-300 mb-1">Backup dos dados</h2>
+    <p class="text-xs text-neutral-500 mb-2">Gere o código, guarde no Notas e cole de volta para restaurar (ou levar para outro aparelho).</p>
+    <textarea id="backupBox" rows="3" placeholder="O código do backup aparece aqui — ou cole um código para restaurar" class="w-full bg-neutral-800 rounded-lg px-3 py-2 text-xs outline-none"></textarea>
+    <div class="grid grid-cols-2 gap-2 mt-2">
+      <button onclick="exportBackup()" class="bg-neutral-800 active:bg-neutral-700 rounded-lg py-2 text-sm font-semibold">Gerar backup</button>
+      <button onclick="importBackup()" class="bg-emerald-600 active:bg-emerald-500 rounded-lg py-2 text-sm font-semibold">Restaurar</button>
+    </div>
+    <div id="backupStatus" class="text-xs text-neutral-500 mt-2"></div>
+  </section>
+
+</main>
+
+<div id="manualModal" class="fixed inset-0 bg-black/70 z-20 hidden items-end" onclick="if(event.target===this) closeManual()">
+  <div class="bg-neutral-900 rounded-t-2xl p-4 w-full max-w-md mx-auto" style="padding-bottom:calc(1rem + env(safe-area-inset-bottom,0px))">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-sm font-semibold text-neutral-300">Novo gasto</h2>
+      <button onclick="closeManual()" class="text-neutral-500 text-lg leading-none">✕</button>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <input id="descInput" placeholder="Descrição" class="col-span-2 bg-neutral-800 rounded-lg px-3 py-2 text-sm outline-none">
+      <input id="amountInput" type="number" step="0.01" placeholder="Valor (R$)" class="bg-neutral-800 rounded-lg px-3 py-2 text-sm outline-none">
+      <input id="dateInput" type="date" class="bg-neutral-800 rounded-lg px-3 py-2 text-sm outline-none">
+      <select id="catInput" class="col-span-2 bg-neutral-800 rounded-lg px-3 py-2 text-sm outline-none">
+        <option>Alimentação</option><option>Transporte</option><option>Moradia</option>
+        <option>Saúde</option><option>Lazer</option><option>Assinaturas</option>
+        <option>Compras</option><option>Educação</option><option>Outros</option>
+      </select>
+    </div>
+    <button onclick="onAdd()" class="w-full mt-3 bg-emerald-600 active:bg-emerald-500 rounded-lg py-2 text-sm font-semibold">Adicionar gasto</button>
+  </div>
+</div>
+
+<script>
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+const CAT_COLORS = {Alimentação:"#f59e0b",Transporte:"#3b82f6",Moradia:"#8b5cf6",Saúde:"#ef4444",Lazer:"#ec4899",Assinaturas:"#06b6d4",Compras:"#10b981",Educação:"#eab308",Outros:"#6b7280"};
+const KEYWORDS = {
+  Alimentação:["ifood","rappi","restaurante","lanchonete","padaria","supermercado","mercado","acougue","hortifruti","burger","pizza"],
+  Transporte:["uber","99app","99pop","taxi","combustivel","posto ","estacionamento","pedagio","metro","onibus","gasolina"],
+  Moradia:["aluguel","condominio","energia","luz ","agua ","internet","claro","vivo","tim ","tim*","gas "],
+  Saúde:["farmacia","drogaria","hospital","clinica","unimed","academia","dentista"],
+  Lazer:["cinema","ingresso","viagem","hotel","bar ","show","balada","airbnb"],
+  Assinaturas:["netflix","spotify","amazon prime","disney","hbo","youtube","icloud"],
+  Compras:["shopping","loja","magazine luiza","amazon","mercado livre","americanas","shein","aliexpress"],
+  Educação:["curso","faculdade","escola","udemy","livraria"]
+};
+function categorize(desc){
+  const d = (desc||"").toLowerCase();
+  for(const [cat,words] of Object.entries(KEYWORDS)) if(words.some(w=>d.includes(w))) return cat;
+  return "Outros";
+}
+function fmt(v){ return (Number(v)||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
+function fmtDate(d){ if(!d) return ""; const [y,m,day]=d.split("-"); return `${day}/${m}`; }
+function monthsBack(ym,n){
+  const [y,m] = ym.split("-").map(Number);
+  const out=[];
+  for(let i=n-1;i>=0;i--) out.push(new Date(y,m-1-i,1).toISOString().slice(0,7));
+  return out;
+}
+function esc(s){ return (s||"").toString().replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+let expenses=[], budget=0, dbApi=null, useDb=false, chart=null, chartEvo=null, pending=[];
+let selectedYm = new Date().toISOString().slice(0,7);
+
+async function initStore(){
+  try{
+    if(typeof window.claude!=="undefined" && window.claude.use){
+      dbApi = await window.claude.use("db");
+    }
+  }catch(e){ dbApi=null; }
+  useDb = !!dbApi;
+  if(useDb){
+    try{
+      dbApi.collection("expenses").orderBy("createdAt","desc").limit(500).onSnapshot(
+        snap=>{ expenses = snap.docs.map(d=>({id:d.id,...d.data()})); render(); },
+        ()=>{ useDb=false; loadLocal(); render(); }
+      );
+      const s = await dbApi.doc("settings/config").get();
+      if(s.exists) budget = s.data().monthlyBudget || 0;
+    }catch(e){ useDb=false; loadLocal(); }
+  } else {
+    loadLocal();
+  }
+  render();
+}
+function loadLocal(){
+  try{
+    expenses = JSON.parse(localStorage.getItem("df_expenses")||"[]");
+    budget = JSON.parse(localStorage.getItem("df_budget")||"0");
+  }catch(e){ expenses=[]; budget=0; }
+}
+function saveLocal(){
+  try{
+    localStorage.setItem("df_expenses", JSON.stringify(expenses));
+    localStorage.setItem("df_budget", JSON.stringify(budget));
+  }catch(e){}
+}
+async function addExpense(desc,amount,cat,date){
+  const item = {desc,amount:Number(amount),category:cat,date,createdAt:Date.now()};
+  if(useDb){
+    try{ await dbApi.collection("expenses").add(item); return; }catch(e){}
+  }
+  expenses.unshift({id:"local"+Date.now()+Math.random(), ...item});
+  saveLocal(); render();
+}
+async function removeExpense(id){
+  if(useDb){ try{ await dbApi.doc("expenses/"+id).delete(); return; }catch(e){} }
+  expenses = expenses.filter(e=>e.id!==id);
+  saveLocal(); render();
+}
+async function setBudget(v){
+  budget = v;
+  if(useDb){ try{ await dbApi.doc("settings/config").set({monthlyBudget:v}); }catch(e){} }
+  else saveLocal();
+  render();
+}
+function onAdd(){
+  const desc = document.getElementById("descInput").value.trim();
+  const amount = parseFloat(document.getElementById("amountInput").value);
+  const cat = document.getElementById("catInput").value;
+  const date = document.getElementById("dateInput").value || new Date().toISOString().slice(0,10);
+  if(!desc || !amount) return;
+  addExpense(desc,amount,cat,date);
+  document.getElementById("descInput").value="";
+  document.getElementById("amountInput").value="";
+  closeManual();
+}
+function openManual(){
+  const todayYm = new Date().toISOString().slice(0,7);
+  document.getElementById("dateInput").value = (selectedYm===todayYm) ? todayYm+"-"+String(new Date().getDate()).padStart(2,"0") : selectedYm+"-01";
+  const m = document.getElementById("manualModal");
+  m.classList.remove("hidden"); m.classList.add("flex");
+}
+function closeManual(){
+  const m = document.getElementById("manualModal");
+  m.classList.add("hidden"); m.classList.remove("flex");
+}
+function changeMonth(delta){
+  const [y,m] = selectedYm.split("-").map(Number);
+  selectedYm = new Date(y, m-1+delta, 15).toISOString().slice(0,7);
+  render();
+}
+function exportBackup(){
+  const data = JSON.stringify({v:1,budget,expenses:expenses.map(e=>({desc:e.desc,amount:e.amount,category:e.category,date:e.date}))});
+  const box = document.getElementById("backupBox"), st = document.getElementById("backupStatus");
+  box.value = data; box.select();
+  const ok = ()=>{ st.textContent = "Backup gerado e copiado. Cole em um lugar seguro (ex.: Notas)."; };
+  const fail = ()=>{ st.textContent = "Backup gerado. Toque na caixa, selecione tudo e copie."; };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(data).then(ok,fail); else fail();
+}
+function importBackup(){
+  const st = document.getElementById("backupStatus");
+  try{
+    const data = JSON.parse(document.getElementById("backupBox").value);
+    const seen = new Set(expenses.map(e=>`${e.date}|${e.desc}|${e.amount}`));
+    let n = 0;
+    (data.expenses||[]).forEach(e=>{
+      const k = `${e.date}|${e.desc}|${e.amount}`;
+      if(!e.desc || !e.date || !(Number(e.amount)>0) || seen.has(k)) return;
+      seen.add(k);
+      addExpense(e.desc, e.amount, CAT_COLORS[e.category] ? e.category : categorize(e.desc), e.date);
+      n++;
+    });
+    if(!budget && Number(data.budget)>0) setBudget(Number(data.budget));
+    st.textContent = `${n} lançamentos restaurados.`;
+  }catch(err){
+    st.textContent = "Não consegui ler esse backup. Cole o código completo gerado pelo botão Gerar backup.";
+  }
+}
+
+function render(){
+  const ym = selectedYm;
+  document.getElementById("monthSelLabel").textContent = new Date(ym+"-15").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+  const monthExpenses = expenses.filter(e=>e.date && e.date.slice(0,7)===ym);
+  const total = monthExpenses.reduce((s,e)=>s+Number(e.amount||0),0);
+  const byCat = {};
+  monthExpenses.forEach(e=>{ byCat[e.category]=(byCat[e.category]||0)+Number(e.amount||0); });
+
+  document.getElementById("totalGasto").textContent = fmt(total);
+  const remaining = budget - total;
+  const restEl = document.getElementById("restante");
+  restEl.textContent = fmt(remaining);
+  restEl.className = "text-2xl font-bold " + (budget>0 && remaining<0 ? "text-red-400" : "text-emerald-400");
+  if(document.activeElement.id!=="budgetInput") document.getElementById("budgetInput").value = budget || "";
+
+  const alerts=[];
+  if(budget>0 && total>budget) alerts.push(`🔴 Orçamento estourado: ${fmt(total-budget)} acima do previsto este mês.`);
+  const topCat = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById("maiorCat").textContent = topCat ? topCat[0] : "—";
+  const [yy,mm] = ym.split("-").map(Number);
+  const daysInMonth = new Date(yy,mm,0).getDate();
+  const elapsedDays = (ym===new Date().toISOString().slice(0,7)) ? new Date().getDate() : daysInMonth;
+  document.getElementById("mediaDia").textContent = fmt(total/Math.max(elapsedDays,1));
+  if(topCat && total>0 && topCat[1]/total>0.4) alerts.push(`⚠️ ${topCat[0]} concentra ${(topCat[1]/total*100).toFixed(0)}% dos seus gastos do mês.`);
+  document.getElementById("alerts").innerHTML = alerts.length
+    ? alerts.map(a=>`<div class="bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm rounded-xl p-3 mb-2">${a}</div>`).join("")
+    : `<div class="text-neutral-500 text-sm">Sem alertas por enquanto — os gastos deste mês estão sob controle.</div>`;
+
+  try{
+    const labels = Object.keys(byCat), data = Object.values(byCat);
+    if(chart) chart.destroy();
+    if(window.Chart){
+      chart = new Chart(document.getElementById("chartCat"), {
+        type:"doughnut",
+        data:{labels, datasets:[{data, backgroundColor:labels.map(l=>CAT_COLORS[l]||"#6b7280"), borderWidth:0}]},
+        options:{plugins:{legend:{position:"bottom",labels:{color:"#d1d5db",boxWidth:12,padding:12}}},cutout:"65%"}
+      });
+    }
+  }catch(e){}
+
+  try{
+    const evoMonths = monthsBack(ym,12);
+    const evoTotals = evoMonths.map(m2=>expenses.filter(x=>x.date&&x.date.slice(0,7)===m2).reduce((s,x)=>s+Number(x.amount||0),0));
+    const evoLabels = evoMonths.map(m2=>{ const [y2,m3]=m2.split("-").map(Number); return new Date(y2,m3-1,1).toLocaleDateString("pt-BR",{month:"short"})+"/"+String(y2).slice(2); });
+    if(chartEvo) chartEvo.destroy();
+    if(window.Chart){
+      chartEvo = new Chart(document.getElementById("chartEvo"), {
+        type:"bar",
+        data:{labels:evoLabels, datasets:[{data:evoTotals, backgroundColor:"#a78bfa", borderRadius:4}]},
+        options:{plugins:{legend:{display:false}}, scales:{x:{ticks:{color:"#9ca3af",font:{size:9}},grid:{display:false}}, y:{ticks:{color:"#9ca3af"},grid:{color:"#262626"}}}}
+      });
+    }
+  }catch(e){}
+
+  const list = document.getElementById("list");
+  list.innerHTML = monthExpenses.length ? monthExpenses.map(e=>`
+    <div class="flex items-center justify-between bg-neutral-900 rounded-xl p-3 mb-2">
+      <div><div class="text-sm font-medium">${esc(e.desc)}</div>
+      <div class="text-xs text-neutral-500 flex items-center gap-1.5 mt-0.5"><span class="px-1.5 py-0.5 rounded" style="background:${(CAT_COLORS[e.category]||'#6b7280')}26;color:${CAT_COLORS[e.category]||'#6b7280'}">${esc(e.category)}</span>${fmtDate(e.date)}</div></div>
+      <div class="flex items-center gap-3"><div class="font-semibold">${fmt(e.amount)}</div>
+      <button onclick="removeExpense('${e.id}')" class="text-neutral-600 active:text-red-400 text-lg leading-none">✕</button></div>
+    </div>`).join("")
+    : `<div class="text-neutral-500 text-sm text-center py-6">Nenhum gasto lançado este mês ainda.</div>`;
+}
+
+function parseLines(lines){
+  const out=[];
+  const amountRe = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*$/;
+  const dateRe = /^(\d{2})\/(\d{2})(?:\/\d{2,4})?/;
+  const skipRe = /total|saldo|limite|vencimento|p[aá]gina|resumo|encargos|anuidade/i;
+  lines.forEach(l=>{
+    l=(l||"").trim();
+    if(!l || skipRe.test(l)) return;
+    const m = l.match(amountRe);
+    if(!m) return;
+    const amount = parseFloat(m[1].replace(/\./g,"").replace(",","."));
+    if(!amount || amount<=0) return;
+    let desc = l.slice(0,m.index).trim();
+    let date = new Date().toISOString().slice(0,10);
+    const dm = desc.match(dateRe);
+    if(dm){ date = `${new Date().getFullYear()}-${dm[2]}-${dm[1]}`; desc = desc.slice(dm[0].length).trim(); }
+    if(desc.length<2) return;
+    out.push({desc,amount,date,category:categorize(desc)});
+  });
+  return out.slice(0,60);
+}
+function renderReview(){
+  const el = document.getElementById("reviewList");
+  const cats = ["Alimentação","Transporte","Moradia","Saúde","Lazer","Assinaturas","Compras","Educação","Outros"];
+  if(!pending.length){ el.innerHTML=""; return; }
+  el.innerHTML = pending.map((p,i)=>`
+    <div class="flex items-center gap-2 bg-neutral-800 rounded-lg p-2 mb-2 text-xs">
+      <input type="checkbox" checked class="revCheck" data-i="${i}">
+      <input value="${esc(p.desc)}" data-i="${i}" class="revDesc flex-1 min-w-0 bg-neutral-900 rounded px-2 py-1">
+      <input type="number" step="0.01" value="${p.amount}" data-i="${i}" class="revAmount w-16 bg-neutral-900 rounded px-2 py-1">
+      <select data-i="${i}" class="revCat bg-neutral-900 rounded px-1 py-1">
+        ${cats.map(c=>`<option ${c===p.category?"selected":""}>${c}</option>`).join("")}
+      </select>
+    </div>`).join("") + `<button onclick="confirmImport()" class="w-full mt-1 bg-emerald-600 active:bg-emerald-500 rounded-lg py-2 text-sm font-semibold">Confirmar importação</button>`;
+}
+function confirmImport(){
+  let importedYm = null;
+  document.querySelectorAll(".revCheck").forEach(chk=>{
+    if(!chk.checked) return;
+    const i = chk.dataset.i;
+    const desc = document.querySelector(`.revDesc[data-i="${i}"]`).value;
+    const amount = parseFloat(document.querySelector(`.revAmount[data-i="${i}"]`).value);
+    const cat = document.querySelector(`.revCat[data-i="${i}"]`).value;
+    addExpense(desc,amount,cat,pending[i].date);
+    importedYm = pending[i].date.slice(0,7);
+  });
+  pending=[];
+  document.getElementById("reviewList").innerHTML="";
+  document.getElementById("pdfStatus").textContent="Importação concluída.";
+  document.getElementById("pdfInput").value="";
+  if(importedYm){ selectedYm = importedYm; render(); }
+}
+document.getElementById("pdfInput").addEventListener("change", async (ev)=>{
+  const file = ev.target.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById("pdfStatus");
+  statusEl.textContent = "Lendo PDF...";
+  try{
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+    let lines=[];
+    for(let p=1;p<=pdf.numPages;p++){
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      let lastY, line="";
+      content.items.forEach(it=>{
+        if(lastY!==undefined && Math.abs(it.transform[5]-lastY)>2){ lines.push(line); line=""; }
+        line += it.str + " ";
+        lastY = it.transform[5];
+      });
+      if(line) lines.push(line);
+    }
+    pending = parseLines(lines);
+    statusEl.textContent = pending.length ? `${pending.length} lançamentos encontrados — revise antes de importar.` : "Não encontramos valores nesta fatura. Tente lançar manualmente.";
+    renderReview();
+  }catch(e){
+    statusEl.textContent = "Não consegui ler este PDF (pode estar escaneado como imagem, ou protegido por senha).";
+  }
+});
+
+render();
+initStore();
+</script>
+</body>
+</html>
